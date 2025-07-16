@@ -1,5 +1,5 @@
 import type { TabGeneratorRuntimeOptions, TabGenerator } from "./TabGenerator";
-import type { CurveTo, Edge, Vec2 } from "../../types";
+import type { Edge, Vec2, EdgeSegment } from "../../types";
 import type { GeneratorUIMetadata } from '../../ui_types';
 import type { GeneratorConfig, GeneratorFactory } from "../Generator";
 import { TabGeneratorRegistry } from "../Generator";
@@ -8,20 +8,21 @@ import { TabGeneratorRegistry } from "../Generator";
 type TriangleTabGeneratorName = "TriangleTabGenerator";
 export const Name: TriangleTabGeneratorName = "TriangleTabGenerator";
 
-/** Custom config for this generator */
+/** Configuration options for the Triangle Tab Generator */
 export interface TriangleTabGeneratorConfig extends GeneratorConfig {
   name: TriangleTabGeneratorName;
-  /** Determines how "tall" the tab is relative to the length of the edge as a percent, default 20% */
+  /** Height of the triangular tab as a percentage of the edge length (default: 20%) */
   tabHeightRatio?: number;
+  /** Width of the triangle base as a percentage of the edge length (default: 30%) */
+  tabWidthRatio?: number;
 }
 
-/** UI metadata needed for this generator */
+/** UI metadata for the Triangle Tab Generator */
 export const TriangleTabUIMetadata: GeneratorUIMetadata = {
   name: Name,
   displayName: "Triangle",
-  description: "Creates a simple triangle between each (internal) piece edge.",
+  description: "Creates sharp triangular tabs using straight line segments for a geometric, angular appearance.",
   sortHint: 2,
-  // these have to match the config above
   controls: [
     {
       type: 'range',
@@ -32,102 +33,116 @@ export const TriangleTabUIMetadata: GeneratorUIMetadata = {
       max: 100,
       step: 1,
       defaultValue: 20,
-      helpText: 'Determines how "tall" the tab is relative to the length of the edge as a percent',
+      helpText: 'Height of the triangular tab as a percentage of the edge length',
+    },
+    {
+      type: 'range',
+      name: 'tabWidthRatio',
+      label: 'Tab Width',
+      optional: true,
+      min: 10,
+      max: 80,
+      step: 1,
+      defaultValue: 30,
+      helpText: 'Width of the triangle base as a percentage of the edge length',
     },
   ],
 };
 
 /**
- * A simple TabGenerator that adds a triangular "nub" to an edge.
- *
- * This generator serves as a straightforward example of how to implement the
- * TabGenerator interface. It modifies the two half-edges of a given edge,
- * adding a Bézier curve that forms a triangular tab. One half-edge gets an
- * "outie" (convex) tab, and its twin gets a corresponding "innie" (concave)
- * tab, ensuring the pieces will fit together.
+ * Tab generator that creates sharp triangular connectors using straight line segments.
+ * 
+ * This generator produces tabs with a defined geometric triangular shape consisting
+ * of four straight line segments that form a sharp triangular protrusion or indentation
+ * along the puzzle piece edge. The triangular shape provides a clean, angular aesthetic
+ * that contrasts with the curved tabs of other generators.
  */
-export const TriangleTabGeneratorFactory: GeneratorFactory<TabGenerator> = (_width: number, _height: number,config: TriangleTabGeneratorConfig) => {
-  const { tabHeightRatio = 20 } = config;
+export const TriangleTabGeneratorFactory: GeneratorFactory<TabGenerator> = (_width: number, _height: number, config: TriangleTabGeneratorConfig) => {
+  const { tabHeightRatio = 20, tabWidthRatio = 30 } = config;
 
   const TriangleTabGenerator: TabGenerator = {
     addTab(edge: Edge, runtimeOpts: TabGeneratorRuntimeOptions) {
       const { topology, random } = runtimeOpts;
 
-      // 1. Get the half-edges from the topology.
-      // We need the full objects to modify them.
+      // Get the half-edges from the topology
       const he1 = topology.halfEdges.get(edge.heLeft);
       const he2 = topology.halfEdges.get(edge.heRight);
 
-      // Ensure both half-edges exist (which they should for an internal edge).
       if (!he1 || !he2) {
-        console.warn("Could not find half-edges for a given internal edge:", edge.id);
+        console.warn("Could not find half-edges for edge:", edge.id);
         return;
       }
 
-      // 2. Define the edge's start and end points.
-      // The edge for he1 goes from p0 -> p3.
-      // The twin edge (he2) goes from p3 -> p0.
+      // Define edge endpoints
       const p0 = he1.origin;
       const p3 = he2.origin;
 
-      // 3. Calculate edge vectors and properties.
+      // Calculate edge properties
       const edgeVector: Vec2 = [p3[0] - p0[0], p3[1] - p0[1]];
       const edgeLength = Math.sqrt(edgeVector[0] ** 2 + edgeVector[1] ** 2);
-      if (edgeLength < 1e-6) return; // Avoid creating tabs on zero-length edges.
+      
+      if (edgeLength < 1e-6) return; // Skip zero-length edges
 
-      // Calculate a perpendicular vector (normal) to the edge.
-      // The direction of this normal is consistent relative to he1.
+      // Calculate normalized edge direction and perpendicular normal
       const edgeDir: Vec2 = [edgeVector[0] / edgeLength, edgeVector[1] / edgeLength];
       const normalDir: Vec2 = [-edgeDir[1], edgeDir[0]];
 
-      // 4. Calculate the position of the tab's peak.
-      // Find the midpoint of the edge.
-      const midPoint: Vec2 = [p0[0] + edgeVector[0] / 2, p0[1] + edgeVector[1] / 2];
-
-      // Randomly decide if the tab goes "out" or "in" for he1.
+      // Calculate triangle geometry
+      const midPoint: Vec2 = [
+        p0[0] + edgeVector[0] / 2, 
+        p0[1] + edgeVector[1] / 2,
+      ];
+      
+      // Randomly determine tab direction (outward or inward)
       const direction = random() > 0.5 ? 1 : -1;
       const tabHeight = edgeLength * (tabHeightRatio / 100) * direction;
-
-      // Calculate the nub point by moving from the midpoint along the normal.
-      const nubPoint: Vec2 = [
+      const halfTabWidth = edgeLength * (tabWidthRatio / 100) / 2;
+      
+      // Calculate triangle vertices
+      const apexPoint: Vec2 = [
         midPoint[0] + normalDir[0] * tabHeight,
         midPoint[1] + normalDir[1] * tabHeight,
       ];
+      
+      const corner1: Vec2 = [
+        midPoint[0] - edgeDir[0] * halfTabWidth,
+        midPoint[1] - edgeDir[1] * halfTabWidth,
+      ];
+      
+      const corner2: Vec2 = [
+        midPoint[0] + edgeDir[0] * halfTabWidth,
+        midPoint[1] + edgeDir[1] * halfTabWidth,
+      ];
 
-      // 5. Create the Bézier curve for he1's tab.
-      // We create a "sharp" triangular point by setting both control points
-      // to be the same as the nub's peak. This creates two straight lines
-      // (p0 -> nubPoint -> p3) and is a simple way to represent a triangle
-      // with the CubicBezier interface.
-      const tab1: CurveTo = {
-        type: 'bezier',
-        p1: nubPoint,
-        p2: nubPoint,
-        p3: p3,
-      };
+      // Create triangular path segments for first half-edge
+      const he1Segments: EdgeSegment[] = [
+        { type: 'line', p: corner1 },
+        { type: 'line', p: apexPoint },
+        { type: 'line', p: corner2 },
+        { type: 'line', p: p3 },
+      ];
 
-      // 6. Create the corresponding inverse tab for the twin half-edge (he2).
-      // The start and end points are swapped, and the nub is on the opposite side.
-      const nubPointTwin: Vec2 = [
-        midPoint[0] - normalDir[0] * tabHeight, // Invert the nub direction
+      // Create complementary path for twin half-edge (inverted triangle)
+      const apexPointTwin: Vec2 = [
+        midPoint[0] - normalDir[0] * tabHeight,
         midPoint[1] - normalDir[1] * tabHeight,
       ];
-      const tab2: CurveTo = {
-        type: 'bezier',
-        p1: nubPointTwin,
-        p2: nubPointTwin,
-        p3: p0,
-      };
+      
+      const he2Segments: EdgeSegment[] = [
+        { type: 'line', p: corner2 },
+        { type: 'line', p: apexPointTwin },
+        { type: 'line', p: corner1 },
+        { type: 'line', p: p0 },
+      ];
 
-      // 7. Attach the generated tabs to the half-edge objects in the topology.
-      he1.segments = [tab1];
-      he2.segments = [tab2];
+      // Apply segments to half-edges
+      he1.segments = he1Segments;
+      he2.segments = he2Segments;
     },
   };
   return TriangleTabGenerator;
 };
 export default TriangleTabGeneratorFactory;
 
-
-// register the generator
+// Register the generator with the system
 TabGeneratorRegistry.register(Name, TriangleTabGeneratorFactory, TriangleTabUIMetadata);
