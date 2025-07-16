@@ -29,6 +29,7 @@ export const RangeInputControl: m.ClosureComponent<RangeInputControlAttr> = () =
       return m('wa-slider.range-input', {
         label: attrs.config.label,
         "help-text": attrs.config.helpText,
+        size: "small",
         disabled: attrs.disabled,
         value: attrs.value,
         min: attrs.config.min,
