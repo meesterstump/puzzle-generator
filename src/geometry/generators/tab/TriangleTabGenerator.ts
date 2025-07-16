@@ -15,6 +15,8 @@ export interface TriangleTabGeneratorConfig extends GeneratorConfig {
   tabHeightRatio?: number;
   /** Width of the triangle base as a percentage of the edge length (default: 30%) */
   tabWidthRatio?: number;
+  /** Minimum edge length required to create a triangular tab (default: 20) */
+  minEdgeLength?: number;
 }
 
 /** UI metadata for the Triangle Tab Generator */
@@ -27,7 +29,7 @@ export const TriangleTabUIMetadata: GeneratorUIMetadata = {
     {
       type: 'range',
       name: 'tabHeightRatio',
-      label: 'Tab Height',
+      label: 'Tab Height (%)',
       optional: true,
       min: 0,
       max: 100,
@@ -38,13 +40,21 @@ export const TriangleTabUIMetadata: GeneratorUIMetadata = {
     {
       type: 'range',
       name: 'tabWidthRatio',
-      label: 'Tab Width',
+      label: 'Tab Width (%)',
       optional: true,
       min: 10,
       max: 80,
       step: 1,
       defaultValue: 30,
       helpText: 'Width of the triangle base as a percentage of the edge length',
+    },
+    {
+      type: 'number',
+      name: 'minEdgeLength',
+      label: 'Minimum Edge Length',
+      optional: true,
+      defaultValue: 20,
+      helpText: 'Minimum edge length required to create a triangular tab',
     },
   ],
 };
@@ -58,7 +68,7 @@ export const TriangleTabUIMetadata: GeneratorUIMetadata = {
  * that contrasts with the curved tabs of other generators.
  */
 export const TriangleTabGeneratorFactory: GeneratorFactory<TabGenerator> = (_width: number, _height: number, config: TriangleTabGeneratorConfig) => {
-  const { tabHeightRatio = 20, tabWidthRatio = 30 } = config;
+  const { tabHeightRatio = 20, tabWidthRatio = 30, minEdgeLength } = config;
 
   const TriangleTabGenerator: TabGenerator = {
     addTab(edge: Edge, runtimeOpts: TabGeneratorRuntimeOptions) {
@@ -82,6 +92,11 @@ export const TriangleTabGeneratorFactory: GeneratorFactory<TabGenerator> = (_wid
       const edgeLength = Math.sqrt(edgeVector[0] ** 2 + edgeVector[1] ** 2);
       
       if (edgeLength < 1e-6) return; // Skip zero-length edges
+
+      // Check minimum edge length threshold
+      if (minEdgeLength && edgeLength < minEdgeLength) {
+        return; // Edge too small for triangular tab, leave as simple line
+      }
 
       // Calculate normalized edge direction and perpendicular normal
       const edgeDir: Vec2 = [edgeVector[0] / edgeLength, edgeVector[1] / edgeLength];
