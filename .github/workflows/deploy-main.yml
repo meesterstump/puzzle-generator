@@ -14,14 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # 1) Install pnpm first (standalone puts pnpm on PATH reliably)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          standalone: true
+          run_install: false
+
+      # 2) Then setup Node (cache pnpm store)
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-
-      # Install pnpm explicitly (Corepack didn't work)
-      - name: Install pnpm
-        run: npm i -g pnpm@9
 
       - name: Show versions
         run: |
