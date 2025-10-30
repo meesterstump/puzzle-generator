@@ -14,15 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Install pnpm first (standalone puts pnpm on PATH reliably)
+      # 1) Install pnpm using the version declared in package.json: "packageManager"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
           standalone: true
           run_install: false
 
-      # 2) Then setup Node (cache pnpm store)
+      # 2) Setup Node (enable pnpm cache)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
