@@ -111,24 +111,6 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
 
   const clampPercentage = (value: number): number => Math.min(100, Math.max(0, value));
 
-  const EVEN_ROW_NEIGHBORS: [number, number][] = [
-    [0, -1],
-    [0, 1],
-    [-1, -1],
-    [-1, 0],
-    [1, -1],
-    [1, 0],
-  ];
-
-  const ODD_ROW_NEIGHBORS: [number, number][] = [
-    [0, -1],
-    [0, 1],
-    [-1, 0],
-    [-1, 1],
-    [1, 0],
-    [1, 1],
-  ];
-
   const resolveSpacing = (pieceSize: number): { horizontal: number; vertical: number } => {
     const baseSpacing = Math.max(pieceSize * (latticeSpacing / 100), 4);
     const verticalSpacing = baseSpacing * TRIANGULAR_VERTICAL_RATIO;
@@ -150,7 +132,12 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
 
   const generateLattice = (
     runtimeOpts: PointGenerationRuntimeOptions,
-  ): { points: LatticePoint[]; indexByCoord: Map<string, number> } => {
+  ): {
+    points: LatticePoint[];
+    indexByCoord: Map<string, number>;
+    rowLimit: number;
+    columnLimit: number;
+  } => {
     const { width, height, pieceSize, random, border } = runtimeOpts;
     const { horizontal, vertical } = resolveSpacing(pieceSize);
     const overscanX = horizontal;
@@ -181,28 +168,12 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
       }
     }
 
-    return { points, indexByCoord };
-  };
-
-  const getNeighborOffsets = (row: number): [number, number][] => (
-    row % 2 === 0 ? EVEN_ROW_NEIGHBORS : ODD_ROW_NEIGHBORS
-  );
-
-  const getNeighborIndices = (
-    point: LatticePoint,
-    indexByCoord: Map<string, number>,
-  ): number[] => {
-    const indices: number[] = [];
-    const offsets = getNeighborOffsets(point.row);
-    for (const [dRow, dColumn] of offsets) {
-      const neighborRow = point.row + dRow;
-      const neighborColumn = point.column + dColumn;
-      const neighborIndex = indexByCoord.get(`${neighborRow}:${neighborColumn}`);
-      if (neighborIndex !== undefined) {
-        indices.push(neighborIndex);
-      }
-    }
-    return indices;
+    return {
+      points,
+      indexByCoord,
+      rowLimit: rows,
+      columnLimit: columns,
+    };
   };
 
   const shuffleInPlace = (values: number[], random: () => number): void => {
@@ -214,16 +185,100 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
     }
   };
 
-  const clusterLatticePoints = (
+  const createEdgeKey = (a: number, b: number): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
+
+  interface TriangleCell {
+    vertices: [number, number, number];
+    centroid: Vec2;
+  }
+
+  const buildTriangleCells = (
     latticePoints: LatticePoint[],
     indexByCoord: Map<string, number>,
+    rowLimit: number,
+    columnLimit: number,
+    border: PathCommand[],
+  ): { triangles: TriangleCell[]; adjacency: number[][] } => {
+    const triangles: TriangleCell[] = [];
+    const adjacencySets: Set<number>[] = [];
+    const edgeToTriangle = new Map<string, number>();
+
+    const tryAddTriangle = (
+      aCoord: [number, number],
+      bCoord: [number, number],
+      cCoord: [number, number],
+    ): void => {
+      const aIndex = indexByCoord.get(`${aCoord[0]}:${aCoord[1]}`);
+      const bIndex = indexByCoord.get(`${bCoord[0]}:${bCoord[1]}`);
+      const cIndex = indexByCoord.get(`${cCoord[0]}:${cCoord[1]}`);
+      if (aIndex === undefined || bIndex === undefined || cIndex === undefined) {
+        return;
+      }
+
+      const centroid: Vec2 = [
+        (latticePoints[aIndex].position[0]
+          + latticePoints[bIndex].position[0]
+          + latticePoints[cIndex].position[0]) / 3,
+        (latticePoints[aIndex].position[1]
+          + latticePoints[bIndex].position[1]
+          + latticePoints[cIndex].position[1]) / 3,
+      ];
+
+      if (!isPointInBoundary(centroid, border)) {
+        return;
+      }
+
+      const triangleIndex = triangles.length;
+      triangles.push({
+        vertices: [aIndex, bIndex, cIndex],
+        centroid,
+      });
+      adjacencySets.push(new Set<number>());
+
+      const edges: [number, number][] = [
+        [aIndex, bIndex],
+        [bIndex, cIndex],
+        [cIndex, aIndex],
+      ];
+      for (const [start, end] of edges) {
+        const edgeKey = createEdgeKey(start, end);
+        const neighborIndex = edgeToTriangle.get(edgeKey);
+        if (neighborIndex !== undefined) {
+          adjacencySets[triangleIndex].add(neighborIndex);
+          adjacencySets[neighborIndex].add(triangleIndex);
+        } else {
+          edgeToTriangle.set(edgeKey, triangleIndex);
+        }
+      }
+    };
+
+    for (let row = 0; row < rowLimit; row += 1) {
+      const isEvenRow = row % 2 === 0;
+      for (let column = 0; column < columnLimit; column += 1) {
+        if (isEvenRow) {
+          tryAddTriangle([row, column], [row, column + 1], [row + 1, column]);
+          tryAddTriangle([row, column + 1], [row + 1, column + 1], [row + 1, column]);
+        } else {
+          tryAddTriangle([row, column], [row + 1, column + 1], [row + 1, column]);
+          tryAddTriangle([row, column], [row, column + 1], [row + 1, column + 1]);
+        }
+      }
+    }
+
+    const adjacency = adjacencySets.map((neighbors) => Array.from(neighbors));
+    return { triangles, adjacency };
+  };
+
+  const clusterTriangles = (
+    triangles: TriangleCell[],
+    adjacency: number[][],
     mergeChance: number,
     random: () => number,
   ): { clusters: number[][]; assignments: number[] } => {
-    const assignments = new Array<number>(latticePoints.length).fill(-1);
+    const assignments = new Array<number>(triangles.length).fill(-1);
     const clusters: number[][] = [];
 
-    for (let startIndex = 0; startIndex < latticePoints.length; startIndex += 1) {
+    for (let startIndex = 0; startIndex < triangles.length; startIndex += 1) {
       if (assignments[startIndex] !== -1) {
         continue;
       }
@@ -237,7 +292,7 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
         const currentIndex = queue.pop() as number;
         members.push(currentIndex);
 
-        const neighborIndices = getNeighborIndices(latticePoints[currentIndex], indexByCoord);
+        const neighborIndices = adjacency[currentIndex];
         shuffleInPlace(neighborIndices, random);
         for (const neighborIndex of neighborIndices) {
           if (assignments[neighborIndex] !== -1) {
@@ -256,29 +311,34 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
     return { clusters, assignments };
   };
 
-  const computeCentroids = (
+  const computeClusterCentroids = (
     clusters: number[][],
-    latticePoints: LatticePoint[],
+    triangles: TriangleCell[],
     border: PathCommand[],
-  ): Vec2[] => clusters.map((memberIndices) => {
+  ): Vec2[] => clusters.map((triangleIndices) => {
+    if (triangleIndices.length === 0) {
+      return [0, 0];
+    }
+
     let sumX = 0;
     let sumY = 0;
-    for (const index of memberIndices) {
-      const point = latticePoints[index].position;
-      sumX += point[0];
-      sumY += point[1];
+    for (const triangleIndex of triangleIndices) {
+      const centroid = triangles[triangleIndex].centroid;
+      sumX += centroid[0];
+      sumY += centroid[1];
     }
-    const centroid: Vec2 = [sumX / memberIndices.length, sumY / memberIndices.length];
+
+    const centroid: Vec2 = [sumX / triangleIndices.length, sumY / triangleIndices.length];
     if (Number.isFinite(centroid[0]) && Number.isFinite(centroid[1]) && isPointInBoundary(centroid, border)) {
       return centroid;
     }
-    const fallbackPoint = latticePoints[memberIndices[0]].position;
-    return fallbackPoint;
+
+    const fallback = triangles[triangleIndices[0]].centroid;
+    return fallback;
   });
 
   const computeClusterAdjacency = (
-    latticePoints: LatticePoint[],
-    indexByCoord: Map<string, number>,
+    triangleAdjacency: number[][],
     assignments: number[],
   ): Map<number, Set<number>> => {
     const adjacency = new Map<number, Set<number>>();
@@ -301,11 +361,10 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
       ensureEntry(b).add(a);
     };
 
-    latticePoints.forEach((point, index) => {
-      const neighborIndices = getNeighborIndices(point, indexByCoord);
-      const clusterA = assignments[index];
-      for (const neighborIndex of neighborIndices) {
-        const clusterB = assignments[neighborIndex];
+    triangleAdjacency.forEach((neighbors, triangleIndex) => {
+      const clusterA = assignments[triangleIndex];
+      for (const neighborTriangle of neighbors) {
+        const clusterB = assignments[neighborTriangle];
         connect(clusterA, clusterB);
       }
     });
@@ -369,27 +428,39 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
 
   const TownscaperPointGenerator: PointGenerator = {
     generatePoints(runtimeOpts: PointGenerationRuntimeOptions): Vec2[] {
-      const { points, indexByCoord } = generateLattice(runtimeOpts);
+      const { points, indexByCoord, rowLimit, columnLimit } = generateLattice(runtimeOpts);
       if (points.length === 0) {
         return [];
+      }
+
+      const { triangles, adjacency } = buildTriangleCells(
+        points,
+        indexByCoord,
+        rowLimit,
+        columnLimit,
+        runtimeOpts.border,
+      );
+
+      if (triangles.length === 0) {
+        return points.map((entry) => entry.position);
       }
 
       const mergeChance = clampPercentage(mergeProbability) / 100;
       const relaxationPasses = Math.max(0, Math.round(relaxationIterations));
       const relaxationWeight = clampPercentage(relaxationStrength) / 100;
 
-      const { clusters, assignments } = clusterLatticePoints(
-        points,
-        indexByCoord,
+      const { clusters, assignments } = clusterTriangles(
+        triangles,
+        adjacency,
         mergeChance,
         runtimeOpts.random,
       );
 
-      const centroids = computeCentroids(clusters, points, runtimeOpts.border);
-      const adjacency = computeClusterAdjacency(points, indexByCoord, assignments);
+      const centroids = computeClusterCentroids(clusters, triangles, runtimeOpts.border);
+      const clusterAdjacency = computeClusterAdjacency(adjacency, assignments);
       const relaxed = applyRelaxation(
         centroids,
-        adjacency,
+        clusterAdjacency,
         runtimeOpts.border,
         relaxationPasses,
         relaxationWeight,
