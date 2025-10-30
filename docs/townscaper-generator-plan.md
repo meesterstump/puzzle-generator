@@ -39,14 +39,19 @@
 - Manually test the new generator in the development UI to confirm behavior and performance.
 - Document follow-up tuning opportunities or performance considerations for future work.
 
-## Step 2 Progress
+## Step 2 Progress (Complete)
 - Established the initial `TownscaperPointGenerator` module with configuration scaffolding and registry wiring.
 - Implemented a triangular lattice seed stage that respects the puzzle boundary while supporting adjustable spacing and jitter.
 
+## Step 3 Progress
+- Added deterministic clustering that merges neighboring lattice triangles according to a configurable probability.
+- Calculated block centroids and applied boundary-safe relaxation passes to smooth the resulting distribution.
+- Surfaced merge and relaxation controls in the generator UI metadata with tuned default values.
+
 ## Next Steps
-- Extend the generator to group adjacent triangles into larger Townscaper-style blocks using a seeded merge probability.
-- Introduce relaxation/centroid passes that keep merged block centers inside the boundary.
-- Expose merge and relaxation controls in the UI metadata once the behaviors are implemented.
+- Evaluate the merged block size distribution against existing piece generators and adjust probability defaults if necessary.
+- Profile relaxation performance on large puzzles and optimize hotspot helpers where needed.
+- Investigate optional debug rendering to visualize merged regions for future tuning work.
 
 ## Step 1 Audit Notes (Complete)
 - **Generator interfaces & runtime context**
