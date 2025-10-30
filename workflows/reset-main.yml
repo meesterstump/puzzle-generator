@@ -1,0 +1,41 @@
+name: Reset main to upstream
+on:
+  workflow_dispatch:
+    inputs:
+      feature_branch:
+        description: 'A new piece generator inspired by the grid in the game Townscaper (coded via Codex)'
+        required: true
+        default: 'feature/townscaper-layout'
+      upstream:
+        description: 'Upstream owner/repo'
+        required: true
+        default: 'weevilgenius/puzzle-generator'
+      upstream_branch:
+        description: 'Upstream branch to mirror'
+        required: true
+        default: 'main'
+
+jobs:
+  reset:
+    permissions:
+      contents: write  # allow push/force-push with GITHUB_TOKEN
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0  # need full history for reset/branch ops
+      - name: Create feature branch from current main
+        run: |
+          git checkout -b "${{ github.event.inputs.feature_branch }}"
+          git push origin HEAD
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/${{ github.event.inputs.upstream }}.git || true
+          git fetch upstream --prune
+      - name: Hard reset main to upstream and force-push
+        run: |
+          git checkout main
+          git reset --hard "upstream/${{ github.event.inputs.upstream_branch }}"
+          # --force-with-lease is safer; use --force only if needed
+          git push origin main --force-with-lease
