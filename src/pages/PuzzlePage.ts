@@ -28,6 +28,7 @@ import { createRectangleBorder, createCircleBorder, createEllipseBorder, createR
 // register generators (side-effect imports)
 import "../geometry/generators/point/GridJitterPointGenerator";
 import "../geometry/generators/point/PoissonPointGenerator";
+import "../geometry/generators/point/TownscaperPointGenerator";
 import "../geometry/generators/piece/VoronoiPieceGenerator";
 import "../geometry/generators/piece/RectangularPieceGenerator";
 import "../geometry/generators/tab_placement/SimpleTabPlacementStrategy";
