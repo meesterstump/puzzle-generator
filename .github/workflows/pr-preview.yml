@@ -2,10 +2,10 @@ name: PR Preview (GitHub Pages)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]   # closed triggers cleanup
+    types: [opened, synchronize, reopened, closed]  # build on updates; clean on close
 
 permissions:
-  contents: write   # needed to push to gh-pages
+  contents: write
   pull-requests: write
 
 jobs:
@@ -15,23 +15,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-
+      # 1) Install pnpm using the version from package.json's "packageManager"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          standalone: true
           run_install: false
-          
-      - name: Install
+
+      # 2) Setup Node (enable pnpm cache)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+
+      - name: Install deps
         run: pnpm install --frozen-lockfile
 
       - name: Compute base path
@@ -41,12 +44,10 @@ jobs:
       - name: Build (PR-scoped base)
         run: pnpm run build -- --base="${{ steps.base.outputs.BASE }}"
 
-      # SPA fallback so client routing works on Pages
       - name: Add SPA fallback
         run: |
           [ -f dist/index.html ] && cp dist/index.html dist/404.html
 
-      # Deploy to gh-pages/pr-preview/pr-<number> (keeps other previews)
       - name: Deploy preview
         uses: JamesIves/github-pages-deploy-action@v4
         with:
