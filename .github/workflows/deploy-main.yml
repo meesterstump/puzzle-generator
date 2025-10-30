@@ -19,14 +19,16 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # Activate pnpm via Corepack
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9 --activate
-          pnpm --version
+      # Install pnpm explicitly (Corepack didn't work)
+      - name: Install pnpm
+        run: npm i -g pnpm@9
 
-      - name: Install
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+
+      - name: Install deps
         run: pnpm install --frozen-lockfile
 
       # Build with the root base for the main site
