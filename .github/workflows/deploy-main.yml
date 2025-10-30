@@ -1,0 +1,46 @@
+name: Deploy main to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push to gh-pages
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Build with the root base for the main site
+      - name: Build (root base)
+        run: pnpm run build -- --base=/puzzle-generator/
+
+      - name: Add SPA fallback
+        run: |
+          [ -f dist/index.html ] && cp dist/index.html dist/404.html
+
+      # Deploy to gh-pages root WITHOUT wiping PR previews
+      - name: Deploy to gh-pages root
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: dist
+          target-folder: .
+          clean: false   # don't delete pr-preview/ folders
