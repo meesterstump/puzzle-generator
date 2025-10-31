@@ -1,0 +1,69 @@
+name: Branch Preview (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push to gh-pages
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: branch-preview-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install pnpm using the version from package.json's "packageManager"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          standalone: true
+          run_install: false
+
+      # Setup Node (enable pnpm cache)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+
+      - name: Compute base path for this branch
+        id: base
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          SAFE_BRANCH="${BRANCH//\//-}"  # replace slashes for URL-safe folder name
+          echo "SAFE_BRANCH=$SAFE_BRANCH" >> $GITHUB_OUTPUT
+          echo "BASE=/puzzle-generator/branch/$SAFE_BRANCH/" >> $GITHUB_OUTPUT
+          echo "URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/branch/$SAFE_BRANCH/" >> $GITHUB_OUTPUT
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (branch-scoped base)
+        run: pnpm run build -- --base="${{ steps.base.outputs.BASE }}"
+
+      - name: Add SPA fallback
+        run: |
+          [ -f dist/index.html ] && cp dist/index.html dist/404.html
+
+      - name: Deploy to gh-pages/branch/<branch>
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: dist
+          target-folder: branch/${{ steps.base.outputs.SAFE_BRANCH }}
+          clean: false   # keep other previews
+
+      - name: Output preview URL
+        run: |
+          echo "### ✅ Branch preview published" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.base.outputs.URL }}" >> $GITHUB_STEP_SUMMARY
