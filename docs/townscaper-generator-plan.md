@@ -1,73 +1,76 @@
-# Townscaper-Inspired Point Generator Plan
+# Townscaper-Inspired Piece Generator Plan
+
+## Context
+- The current feature branch introduced a `TownscaperPointGenerator`, but routing Townscaper-style lattice logic through the Voronoi piece generator produces shapes that still inherit Voronoi topology. That prevents the algorithm from capturing the recognizable blocky silhouettes from Townscaper.
+- The puzzle pipeline already separates **point** and **piece** generation. For layouts that do not resemble Voronoi tessellations we should build a dedicated piece generator that constructs the topology directly instead of trying to retrofit points.
+- Existing helpers in `src/geometry/generators/piece/PieceGeneratorHelpers.ts` and `linkAndCreateEdges` in `src/geometry/utils.ts` can be reused to materialize pieces once we have polygons for each Townscaper block.
 
 ## Objectives
-- Introduce a new point generator that mimics Townscaper's block placement aesthetic within the existing puzzle generator architecture.
-- Maintain deterministic behavior via the provided seeded random number generator.
-- Keep generation performant for interactive use in the browser.
+1. Design and implement a `TownscaperPieceGenerator` that produces puzzle topology from a Townscaper-inspired lattice without relying on Voronoi.
+2. Preserve determinism by continuing to drive all randomness through the seeded `random` function supplied in the runtime options.
+3. Provide configuration controls that expose key artistic levers (grid spacing, merge probability, relaxation strength, etc.) while keeping sensible defaults.
+4. Ensure compatibility with the existing tab placement and tab geometry pipeline by emitting well-formed `PuzzleTopology` data (pieces, edges, half-edges, vertices, boundary markers).
+5. Retire or hide the incomplete point generator once the new piece generator is validated to avoid confusing duplicate options.
+
+## Guiding Principles
+- **Honor the Townscaper lattice**: model the irregular hexagonal/triangular grid described in the reference article so that neighboring cells meet at consistent 120°/60° angles.
+- **Cluster before polygonization**: treat merged lattice cells as regions to be converted into simple polygons whose boundaries trace the outside edges of the cluster.
+- **Reuse helper utilities**: leverage boundary clipping and topology wiring utilities instead of rebuilding them, keeping the generator focused on cluster assembly.
+- **Respect borders**: always clip generated geometry against the puzzle border and discard clusters that fall completely outside.
+- **Maintain UI parity**: surface configuration metadata in the same style as other piece generators so the Mithril UI can render controls automatically.
+
+## Preview & Validation Strategy
+- **Leverage the existing preview workflow**: ensure every phase exposes its progress through the already-configured GitHub Pages previews so changes remain reviewable on mobile without running a local dev server.
+- **Dedicated Townscaper harness**: create a `TownscaperDebugPage` (or extend `TestPage`) that mounts only the Townscaper generator with debug overlays, large tap targets, and a permalink-friendly route (`/townscaper-debug`). The preview workflow should publish this page alongside the main app so it can be opened directly on mobile Safari/Chrome.
+- **Layered debug toggles**: expose UI switches to visualize successive stages—base lattice, merge clusters, polygon outlines, and final puzzle topology—so early phases can be reviewed visually even before the generator is fully integrated into the main puzzle page.
+- **Mobile-first controls**: ensure the debug view uses responsive layout, zoom presets, and tap-friendly toggle buttons because the reviewer is using a tablet without desktop dev tools.
+- **Logging fallback**: when needed, add an overlay panel that prints key counts (triangles, clusters, polygons, edges) so regression triage is possible without console access.
 
 ## Implementation Roadmap
 
-### 1. Audit Existing Point Generation Infrastructure
-- Review `src/geometry/generators/point/PointGenerator.ts` to confirm required interfaces and runtime options.
-- Study implementations in `src/geometry/generators/point/PoissonPointGenerator.ts` and `src/geometry/generators/point/GridJitterPointGenerator.ts` to understand configuration wiring, RNG usage, and boundary filtering helpers.
-- Catalog reusable geometry utilities in `src/geometry/utils.ts` and related modules for point-in-polygon tests, vector math, and mesh relaxation support.
+### Phase 0 – Preparatory Analysis
+- Audit `PieceGenerator` interface, `PuzzleTopology` structure, and helper functions (`createPieceFromPolygon`, `clipCellToBoundary`, `linkAndCreateEdges`).
+- Catalogue reusable pieces of logic from `TownscaperPointGenerator` (lattice creation, triangle adjacency, clustering, relaxation) that can be transplanted into the piece generator.
+- Identify UI touch points (`PieceGeneratorRegistry`, `PuzzlePage` imports) to integrate the new generator and hide the point generator experiment.
+- Establish a baseline Townscaper debug route so subsequent phases can be demonstrated visually through the existing preview builds.
 
-### 2. Design Townscaper Lattice Workflow
-- Define configuration parameters such as lattice spacing, merge probability, relaxation iterations, and optional jitter derived from puzzle `pieceSize`.
-- Choose internal data structures for triangles, adjacency relationships, and merged regions that stay deterministic with seeded RNG input.
-- Select a relaxation strategy (e.g., Lloyd iterations with centroid snapping) compatible with available utilities.
+### Phase 1 – Core Lattice Model
+- Implement a deterministic routine that builds the Townscaper base lattice across the puzzle bounds (likely via triangular coordinates with alternating row offsets).
+- Store both vertex positions and connectivity metadata (triangles, shared edges) to support later clustering and boundary tracing.
+- Clip or filter lattice vertices to the puzzle border using `isPointInBoundary` while retaining adjacency information for partially clipped cells.
+- Render the lattice in the debug page with color-coded axial coordinates and optional jitter sliders so reviewers can confirm spacing/alignment in the GitHub Pages preview.
 
-### 3. Prototype Geometry Stages
-- Implement helper routines for:
-  - Constructing a triangular lattice clipped to puzzle bounds/border.
-  - Randomly merging adjacent triangle pairs using the seeded RNG without crossing borders.
-  - Subdividing merged regions into quads and extracting representative point positions.
-  - Applying relaxation passes while constraining results to remain inside the puzzle boundary.
-- Devise lightweight validation checks or debug visualizations to verify each stage before full integration.
+### Phase 2 – Block Clustering
+- Reuse/adapt the merge queue logic to group adjacent triangles into clusters based on configurable merge probability.
+- Track cluster membership at the edge level so that we can derive the outer boundary of each cluster without losing neighboring relationships.
+- Ensure clusters respect the puzzle border: drop triangles that straddle the boundary if their centroid falls outside, or split clusters accordingly.
+- Add a debug overlay that fills each cluster with a distinct color and lists cluster statistics in the mobile-friendly panel.
 
-### 4. Implement Generator Module
-- Create `src/geometry/generators/point/TownscaperPointGenerator.ts` with configuration interface, UI metadata, and factory following repository conventions.
-- Integrate the staged helper algorithms, ensuring deterministic RNG usage and respect for provided `bounds` and `border` inputs.
-- Register the generator with `PointGeneratorRegistry` and add the side-effect import in `src/index.ts`.
+### Phase 3 – Polygon Extraction
+- Convert each cluster into a simple polygon by walking the perimeter edges (e.g., build a directed edge map keyed by lattice edge -> cluster id, then trace the boundary loops in clockwise order).
+- Simplify polygons (remove colinear vertices) and clip them against the puzzle border using `clipCellToBoundary` for safety.
+- Compute representative seed/site positions for each cluster (centroid or averaged vertex) for downstream features that expect `piece.site`.
+- Toggle polygon overlays in the debug harness (thicker stroke, vertex markers) so reviewers can verify orientation and clipping against the border.
 
-### 5. UI Integration and Defaults
-- Populate UI metadata with descriptive labels and sensible ranges for the new configuration parameters.
-- Confirm default values produce a visually appealing Townscaper-like distribution without additional tuning.
+### Phase 4 – Topology Construction
+- For every polygon that survives clipping, create puzzle pieces using `createPieceFromPolygon`, storing cluster centroids as the `site`.
+- Link neighboring pieces with `linkAndCreateEdges`, marking true border edges by detecting when only one cluster owns the lattice edge or when clipping truncated the polygon.
+- Populate `topology.vertices` with the deduplicated vertex list following the pattern in the Voronoi generator.
+- Show the half-edge graph in the debug view (piece outlines plus shared edge highlights) and export the topology stats in the overlay panel.
 
-### 6. Verification and QA
-- Run `pnpm exec tsc --noEmit` and `pnpm run lint` to ensure type safety and code style compliance.
-- Manually test the new generator in the development UI to confirm behavior and performance.
-- Document follow-up tuning opportunities or performance considerations for future work.
+### Phase 5 – UI & Integration
+- Add `TownscaperPieceGenerator.ts` with config, UI metadata, factory, and registry registration.
+- Update `src/index.ts` (and any generator pickers) to import the new generator and remove/disable the point generator entry to avoid exposing redundant options.
+- Document configuration fields and defaults in UI metadata to guide users.
+- Wire the generator into `PuzzlePage` behind a feature flag toggle that defaults on once validation is complete, and keep the debug route for regression triage.
 
-## Step 2 Progress (Complete)
-- Established the initial `TownscaperPointGenerator` module with configuration scaffolding and registry wiring.
-- Implemented a triangular lattice seed stage that respects the puzzle boundary while supporting adjustable spacing and jitter.
+### Phase 6 – Validation & Cleanup
+- Run `pnpm exec tsc --noEmit` and `pnpm run lint` to guarantee type and style conformance.
+- Manually exercise the generator within the dev UI to verify shape variety, boundary adherence, and tab placement compatibility.
+- Remove or archive `TownscaperPointGenerator` after confirming the piece generator supersedes it, updating docs and changelog notes accordingly.
+- Fold the debug overlays into a configurable developer mode (hidden behind URL param) once the main feature ships, continuing to rely on the preview builds for regression review.
 
-## Step 3 Progress
-- Added deterministic clustering that merges neighboring lattice triangles according to a configurable probability.
-- Calculated block centroids and applied boundary-safe relaxation passes to smooth the resulting distribution.
-- Surfaced merge and relaxation controls in the generator UI metadata with tuned default values.
-
-## Next Steps
-- Evaluate the merged block size distribution against existing piece generators and adjust probability defaults if necessary.
-- Profile relaxation performance on large puzzles and optimize hotspot helpers where needed.
-- Investigate optional debug rendering to visualize merged regions for future tuning work.
-
-## Step 1 Audit Notes (Complete)
-- **Generator interfaces & runtime context**
-  - `PointGenerationRuntimeOptions` (in `PointGenerator.ts`) provides `width`, `height`, `pieceSize`, the seeded `random` function, and the flattened `border` commands. These are the only runtime inputs a generator can rely on.
-  - `PointGenerator` itself exposes a single `generatePoints(runtimeOpts)` method and returns an array of `Vec2` coordinates. No generator maintains internal state between runs.
-  - All point generators are instantiated via the shared `GeneratorFactory` signature (`Generator.ts`), which always receives `(border, bounds, config)`. Bounds are `{ width, height }` numbers separate from the runtime options.
-- **Factory/config wiring pattern**
-  - Each implementation defines a unique literal `Name` constant and a config interface extending `GeneratorConfig` with a `name` discriminator plus any additional fields (e.g., `jitter` for the grid generator).
-  - Factories capture config defaults at construction time; defaults come from UI metadata `controls[i].defaultValue` when `GeneratorRegistry.getDefaultConfig()` is called. Generation logic assumes these values are already populated.
-  - Registration happens at module load via `PointGeneratorRegistry.register(Name, Factory, UIMetadata)`. Side-effect imports in `src/index.ts` activate the generator.
-- **Implementation patterns in existing generators**
-  - `PoissonPointGenerator` wraps the `poisson-disk-sampling` package, using the provided `pieceSize` as the minimum distance, and filters post-generated points with `isPointInBoundary(point, border)`.
-  - `GridJitterPointGenerator` iterates over a rectangular lattice sized by `pieceSize`, offsets each cell center by `(random() - 0.5) * jitter% * pieceSize`, and likewise filters by boundary containment before pushing points.
-  - Both generators only pull randomness from `runtimeOpts.random`, preserving determinism, and avoid storing intermediate state on the generator object.
-- **Reusable geometry utilities**
-  - `isPointInBoundary` (in `src/geometry/utils.ts`) flattens complex borders (including Bézier curves and arcs) through `flattenBoundary` and then runs an even-odd ray-cast test. This is critical for clipping the triangular lattice later.
-  - `clipPolygonAgainstBoundary` leverages `martinez-polygon-clipping` for robust intersection tests between simple polygons and the flattened boundary.
-  - `flattenBoundary` emits polygon loops derived from command sequences, handling `move`, `line`, `bezier`, and `arc` segments by sampling them into point lists; these will be useful for constraining relaxation operations.
-  - Additional helpers like `distanceSq` and centroid-friendly utilities (e.g., `calculateSegmentsBounds`) exist, but there is no dedicated Lloyd relaxation helper—any smoothing step will need to work with the Vec2 arrays directly.
+## Open Questions & Research Tasks
+- Precisely replicate Townscaper's underlying lattice (a perturbed skewed square grid vs. true triangular lattice) – confirm by studying the reference article or inspecting Townscaper exports.
+- Determine whether relaxation should move cluster centroids or actual polygon vertices to achieve the organic offsets seen in Townscaper.
+- Evaluate performance implications when generating large puzzles (hundreds of clusters) and profile hotspots for potential optimization.
