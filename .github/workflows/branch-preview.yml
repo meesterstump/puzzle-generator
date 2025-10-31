@@ -21,17 +21,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Build the requested branch (the workflow file itself still lives on main)
           ref: ${{ inputs.target_branch }}
 
-      # Install pnpm using the version from package.json's "packageManager"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           standalone: true
           run_install: false
 
-      # Setup Node (enable pnpm cache)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -43,36 +40,42 @@ jobs:
           node -v
           pnpm -v
 
-      - name: Compute base path for this branch
-        id: base
+      - name: Compute deploy path + base
+        id: paths
         shell: bash
         run: |
+          # Sanitize the feature branch name for folder use
           SAFE_BRANCH="${{ inputs.target_branch }}"
-          SAFE_BRANCH="${SAFE_BRANCH//\//-}"  # replace slashes for URL-safe folder name
+          SAFE_BRANCH="${SAFE_BRANCH//\//-}"
+          # Use a single source of truth for where we deploy inside gh-pages
+          DEPLOY_SUBDIR="branch/${SAFE_BRANCH}"
+          BASE="/puzzle-generator/${DEPLOY_SUBDIR}/"
+          URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${DEPLOY_SUBDIR}/"
           echo "SAFE_BRANCH=$SAFE_BRANCH" >> $GITHUB_OUTPUT
-          echo "BASE=/puzzle-generator/branch/$SAFE_BRANCH/" >> $GITHUB_OUTPUT
-          echo "URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/branch/$SAFE_BRANCH/" >> $GITHUB_OUTPUT
+          echo "DEPLOY_SUBDIR=$DEPLOY_SUBDIR" >> $GITHUB_OUTPUT
+          echo "BASE=$BASE" >> $GITHUB_OUTPUT
+          echo "URL=$URL" >> $GITHUB_OUTPUT
 
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
       - name: Build (branch-scoped base)
-        run: pnpm run build -- --base="${{ steps.base.outputs.BASE }}"
+        run: pnpm run build -- --base="${{ steps.paths.outputs.BASE }}"
 
       - name: Add SPA fallback
         run: |
           [ -f dist/index.html ] && cp dist/index.html dist/404.html
 
-      - name: Deploy to gh-pages/branch/<branch>
+      - name: Deploy to gh-pages/<DEPLOY_SUBDIR>
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
           folder: dist
-          target-folder: branch/${{ steps.base.outputs.SAFE_BRANCH }}
+          target-folder: ${{ steps.paths.outputs.DEPLOY_SUBDIR }}
           clean: false   # keep other previews
 
       - name: Output preview URL
         run: |
           echo "### ✅ Branch preview published" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.base.outputs.URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.paths.outputs.URL }}" >> $GITHUB_STEP_SUMMARY
