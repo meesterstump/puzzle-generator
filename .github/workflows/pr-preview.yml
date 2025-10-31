@@ -1,0 +1,98 @@
+name: PR Preview (GitHub Pages)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]  # build on updates; clean on close
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-preview-${{ github.event.number }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Install pnpm using the version from package.json's "packageManager"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          standalone: true
+          run_install: false
+
+      # 2) Setup Node (enable pnpm cache)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+
+      # 3) Compute deploy subdir + base + URL
+      - name: Compute preview paths
+        id: paths
+        shell: bash
+        run: |
+          DEPLOY_SUBDIR="pr-preview/pr-${{ github.event.number }}"
+          BASE="/puzzle-generator/${DEPLOY_SUBDIR}/"
+          URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${DEPLOY_SUBDIR}/"
+          echo "DEPLOY_SUBDIR=$DEPLOY_SUBDIR" >> $GITHUB_OUTPUT
+          echo "BASE=$BASE" >> $GITHUB_OUTPUT
+          echo "URL=$URL" >> $GITHUB_OUTPUT
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      # 4) Build with correct base (call vite directly so flag is respected)
+      - name: Build (PR-scoped base)
+        run: pnpm vite build --base="${{ steps.paths.outputs.BASE }}"
+
+      - name: Add SPA fallback
+        run: |
+          [ -f dist/index.html ] && cp dist/index.html dist/404.html
+
+      # 5) Deploy to gh-pages/<DEPLOY_SUBDIR>
+      - name: Deploy preview
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: dist
+          target-folder: ${{ steps.paths.outputs.DEPLOY_SUBDIR }}
+          clean: false
+
+      - name: Comment preview URL
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: |
+            🔍 Preview ready:
+            ${{ steps.paths.outputs.URL }}
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Remove this PR's preview folder
+        run: |
+          rm -rf "pr-preview/pr-${{ github.event.number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove preview for PR #${{ github.event.number }}" || echo "Nothing to delete"
+          git push
