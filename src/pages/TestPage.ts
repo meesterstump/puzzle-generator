@@ -63,8 +63,8 @@ export const TestPage: m.ClosureComponent<unknown> = () => {
   return {
     view: () => {
       return m(".page", [
-        m("h1", "Path Editor - Phase 4 Pan and Zoom"),
-        m("p", "Testing the PathEditor component with pan and zoom support."),
+        m("h1", "Path Editor"),
+        m("p", "Testing the PathEditor component."),
 
         m(".test-page", [
           // PathEditor component
@@ -98,12 +98,18 @@ export const TestPage: m.ClosureComponent<unknown> = () => {
               m("p", "The editor has two modes:"),
               m("ul", { style: "margin: 0.5rem 0;" }, [
                 m("li", m("strong", "Drawing Mode"), ": Click to add points (straight lines), or click-drag to add points with smooth bezier curves"),
-                m("li", "Stay in drawing mode until you click the ", m("strong", "End Drawing"), " button"),
+                m("ul", { style: "margin-left: 1rem;" }, [
+                  m("li", "Move near the first point to see a green circle indicator - click to close the path"),
+                  m("li", "Closing the path automatically switches to Edit mode"),
+                  m("li", "Or click ", m("strong", "End Drawing"), " to finish without closing"),
+                ]),
                 m("li", m("strong", "Editing Mode"), ":"),
                 m("ul", { style: "margin-left: 1rem;" }, [
                   m("li", "Click anywhere on the path to select it and show all vertices"),
-                  m("li", "Click a specific vertex to select it, then drag to move it"),
+                  m("li", "Click a specific vertex to select it (turns blue), then drag to move it"),
                   m("li", "Drag curve handles to adjust curve shape"),
+                  m("li", "Hold ", m("strong", "Shift"), " and click on the path to insert a new point"),
+                  m("li", "Select a vertex and press ", m("strong", "Delete"), " or ", m("strong", "Backspace"), " to remove it"),
                   m("li", "Click empty space to deselect"),
                 ]),
                 m("li", "The mode indicator below the canvas shows the current mode"),
@@ -131,17 +137,6 @@ export const TestPage: m.ClosureComponent<unknown> = () => {
             }),
           ]),
 
-          // Phasestatus
-          m(".findings", [
-            m("h2", "Implementation Status"),
-            m("h3", { style: "margin-top: 1rem;" }, "Phase 4 - Pan and Zoom:"),
-            m("ul", [
-              m("li", "✅ Spacebar + drag to pan"),
-              m("li", "✅ Mouse wheel to zoom (centered on cursor)"),
-              m("li", "✅ Zoom dropdown with preset levels"),
-              m("li", "✅ Recenter button to reset view"),
-            ]),
-          ]),
         ]),
       ]);
     },

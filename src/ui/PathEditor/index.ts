@@ -17,7 +17,7 @@ import {
   PRESET_ZOOM_LABELS,
 } from './constants';
 import { paperPathToPathCommands, pathCommandsToPaperPath } from './geometry';
-import { setupMouseHandling, cleanupMouseHandling } from './mouseHandling';
+import { setupMouseHandling, cleanupMouseHandling } from './interaction';
 import type MithrilViewEvent from '../../utils/MithrilViewEvent';
 
 // component level CSS
@@ -89,8 +89,11 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
     selectedHandle: null,
     zoom: DEFAULT_ZOOM,
     isSpacebarPressed: false,
+    isShiftPressed: false,
     pendingPoint: null,
     isDraggingCurve: false,
+    isNearFirstPoint: false,
+    snapIndicator: null,
   };
 
   let tool: paper.Tool | null = null;
@@ -168,6 +171,7 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
       // Clear any pending curve state
       state.pendingPoint = null;
       state.isDraggingCurve = false;
+      state.isNearFirstPoint = false;
 
       // Don't select anything by default in edit mode
       // Vertices will only be shown when clicked
@@ -176,6 +180,11 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
       if (state.previewPath) {
         state.previewPath.removeSegments();
         state.previewPath.visible = false;
+      }
+
+      // Hide snap indicator
+      if (state.snapIndicator) {
+        state.snapIndicator.visible = false;
       }
 
       m.redraw();
@@ -198,6 +207,7 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
     state.canvas = null;
     state.path = null;
     state.previewPath = null;
+    state.snapIndicator = null;
     state.selectedSegment = null;
     state.selectedHandle = null;
   };
@@ -270,6 +280,10 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
         state.selectedHandle = null;
         state.pendingPoint = null;
         state.isDraggingCurve = false;
+        state.isNearFirstPoint = false;
+        if (state.snapIndicator) {
+          state.snapIndicator.visible = false;
+        }
         m.redraw();
       }
       // If initialPath has data, reload it
@@ -288,6 +302,10 @@ export const PathEditor: m.ClosureComponent<PathEditorAttrs> = () => {
         state.selectedHandle = null;
         state.pendingPoint = null;
         state.isDraggingCurve = false;
+        state.isNearFirstPoint = false;
+        if (state.snapIndicator) {
+          state.snapIndicator.visible = false;
+        }
         m.redraw();
       }
     },

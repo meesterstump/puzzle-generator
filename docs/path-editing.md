@@ -223,7 +223,7 @@ Given the complexity of this component, it will be organized as a directory with
 src/ui/PathEditor/
 ├── index.ts           # Main component export and Mithril rendering
 ├── geometry.ts        # Path conversion (Paper.js ↔ PathCommand[])
-├── mouseHandling.ts   # Mouse/touch event handling and tools
+├── interaction.ts     # Mouse/touch event handling and tools
 ├── constants.ts       # Types and tweakable constants
 └── [others as needed] # Additional utilities for maintainability
 ```
@@ -243,7 +243,7 @@ src/ui/PathEditor/
   - Component-specific geometric calculations (snap detection, handle placement)
   - Note: General-purpose geometry utilities should go in `src/geometry/utils.ts` instead
 
-- **`mouseHandling.ts`**:
+- **`interaction.ts`**:
   - Paper.js Tool initialization and event handlers
   - Mouse/touch event processing (onMouseDown, onMouseDrag, onMouseUp, onMouseMove)
   - Mode-specific tool behavior (drawing vs editing)
@@ -635,7 +635,7 @@ This component is being developed in phases to minimize risk and validate the ar
 - ✅ Component structure in `src/ui/PathEditor/` directory with multi-file organization
   - `index.ts`: Component export and Mithril lifecycle
   - `geometry.ts`: Path conversion utilities (MoveTo/LineTo only)
-  - `mouseHandling.ts`: Basic mouse event handling
+  - `interaction.ts`: Basic mouse event handling
   - `constants.ts`: Types and constants
 - ✅ Render PathEditor component in TestPage
 - ✅ **Drawing mode**: Click to add multiple points with straight lines
@@ -786,23 +786,45 @@ When implementing panning, we initially attempted to use `paper.view.translate()
 
 ---
 
-### Phase 5: Additional Core Interactions
+### Phase 5 ✅ (Complete): Additional Core Interactions
 
 **Objective**: Add remaining editing interactions and visual polish.
 
 **Deliverables**:
-- **Cursor feedback**: Appropriate cursors for different contexts (crosshair, move, pointer, grab)
-- **Keyboard shortcuts**:
-  - Delete/Backspace: Remove selected point
-  - Escape: Deselect all
-  - Shift: Modifiers (constrain movement, insert point)
-- **Close path**: Snap to first point when nearby, visual indicator
-- **Point insertion**: Shift+Click on segment to insert new point
-- **Point type toggle**: Double-click to toggle between line and curve segment (optional)
-- **Visual feedback**: Preview segment, highlight first point when close, larger hit areas
-- Component attributes: `darkMode`, `bounds`
+- ✅ **Cursor feedback**: Appropriate cursors for different contexts (crosshair, move, pointer, grab)
+  - Crosshair in draw mode and when Shift is held in edit mode (insert point mode)
+  - Move cursor over anchor points
+  - Pointer cursor over handles and path stroke
+  - Grab/grabbing cursor when spacebar is held for panning
+  - Copy cursor when near first point (snap to close)
+- ✅ **Keyboard shortcuts**:
+  - Delete/Backspace: Remove selected point (requires at least 3 segments in path)
+  - Shift: Enable insert point mode in edit mode
+- ✅ **Close path**: Snap to first point when nearby with visual indicator
+  - Green circle indicator appears around first point when within snap threshold (15px)
+  - Preview line shows connection to first point
+  - Click to close path and automatically switch to edit mode
+- ✅ **Point insertion**: Shift+Click on segment to insert new point
+  - Crosshair cursor when Shift is held in edit mode
+  - Click anywhere on path stroke to insert a new anchor point at that location
+  - Newly inserted point is automatically selected
+- ✅ **State tracking**: Added `isShiftPressed` and `isNearFirstPoint` state flags
 
-**Success Criteria**: Component feels responsive and intuitive, keyboard shortcuts work, closing paths is smooth, cursor changes provide clear feedback.
+**Explicitly Deferred**:
+- ❌ Escape: Deselect all
+- ❌ Shift+Drag: Constrain movement to axes
+- ❌ Point type toggle: Double-click to toggle between line and curve segment
+- ❌ Component attributes: `darkMode`, `bounds`
+- ❌ Curve-aware point insertion (inserting point on curve currently creates zero-length handles, which disrupts visual continuity)
+
+**Implementation Notes**:
+- Cursor management centralized in `updateCursor()` function with priority-based logic
+- Snap detection in `updatePreviewPath()` uses Paper.js `getDistance()` for accuracy
+- Point insertion uses Paper.js hit testing with `strokeHit.location` for precise placement
+- Selection state is now preserved across mouse up events (only cleared by explicit actions)
+- Snap indicator is a Paper.js Circle that is shown/hidden as needed
+
+**Status**: Complete. Core editing interactions are functional and intuitive. Advanced features deferred to future phases.
 
 ---
 
@@ -882,7 +904,7 @@ This section tracks issues discovered during implementation that need further in
 - Result: Clean appearance with clear selection state
 
 **Related Files**:
-- `src/ui/PathEditor/mouseHandling.ts:127-142` (updated selection logic)
+- `src/ui/PathEditor/interaction.ts:127-142` (updated selection logic)
 - `src/ui/PathEditor/index.ts:101-112,141-155` (removed fullySelected initialization)
 
 ### Clear Canvas State Management ✅ (Resolved)
