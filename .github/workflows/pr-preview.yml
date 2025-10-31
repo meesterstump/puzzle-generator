@@ -12,6 +12,10 @@ jobs:
   build:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
+    concurrency:
+      group: pr-preview-${{ github.event.number }}
+      cancel-in-progress: true
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,27 +38,37 @@ jobs:
           node -v
           pnpm -v
 
+      # 3) Compute deploy subdir + base + URL
+      - name: Compute preview paths
+        id: paths
+        shell: bash
+        run: |
+          DEPLOY_SUBDIR="pr-preview/pr-${{ github.event.number }}"
+          BASE="/puzzle-generator/${DEPLOY_SUBDIR}/"
+          URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${DEPLOY_SUBDIR}/"
+          echo "DEPLOY_SUBDIR=$DEPLOY_SUBDIR" >> $GITHUB_OUTPUT
+          echo "BASE=$BASE" >> $GITHUB_OUTPUT
+          echo "URL=$URL" >> $GITHUB_OUTPUT
+
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
-      - name: Compute base path
-        id: base
-        run: echo "BASE=/puzzle-generator/pr-preview/pr-${{ github.event.number }}/" >> $GITHUB_OUTPUT
-
+      # 4) Build with correct base (call vite directly so flag is respected)
       - name: Build (PR-scoped base)
-        run: pnpm run build -- --base="${{ steps.base.outputs.BASE }}"
+        run: pnpm vite build --base="${{ steps.paths.outputs.BASE }}"
 
       - name: Add SPA fallback
         run: |
           [ -f dist/index.html ] && cp dist/index.html dist/404.html
 
+      # 5) Deploy to gh-pages/<DEPLOY_SUBDIR>
       - name: Deploy preview
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
           folder: dist
-          target-folder: pr-preview/pr-${{ github.event.number }}
+          target-folder: ${{ steps.paths.outputs.DEPLOY_SUBDIR }}
           clean: false
 
       - name: Comment preview URL
@@ -62,7 +76,7 @@ jobs:
         with:
           message: |
             🔍 Preview ready:
-            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
+            ${{ steps.paths.outputs.URL }}
 
   cleanup:
     if: github.event.action == 'closed'
