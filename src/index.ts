@@ -9,6 +9,7 @@ import Navigation from './ui/Navigation';
 import PuzzlePage from './pages/PuzzlePage';
 import PuzzlePaperPage from './pages/PuzzlePaperPage';
 import TestPage from './pages/TestPage';
+import TownscaperDebugPage from './pages/TownscaperDebugPage';
 
 // Webawesome components
 import { registerIconLibrary } from '@awesome.me/webawesome/dist/webawesome.js';
@@ -67,5 +68,8 @@ m.route(document.body, "/puzzle", {
   },
   "/test": {
     render: () => m(Layout, m(TestPage)),
+  },
+  "/townscaper-debug": {
+    render: () => m(Layout, m(TownscaperDebugPage)),
   },
 });
