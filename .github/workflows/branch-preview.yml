@@ -21,14 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Build the requested branch (the workflow itself lives on main)
           ref: ${{ inputs.target_branch }}
 
+      # 1) Install pnpm using the version from package.json's "packageManager"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           standalone: true
           run_install: false
 
+      # 2) Setup Node (enable pnpm cache)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -40,33 +43,35 @@ jobs:
           node -v
           pnpm -v
 
+      # 3) Compute deploy path + base URL
       - name: Compute deploy path + base
         id: paths
         shell: bash
         run: |
-          # Sanitize the feature branch name for folder use
           SAFE_BRANCH="${{ inputs.target_branch }}"
-          SAFE_BRANCH="${SAFE_BRANCH//\//-}"
-          # Use a single source of truth for where we deploy inside gh-pages
+          SAFE_BRANCH="${SAFE_BRANCH//\//-}"   # Replace slashes for safety
           DEPLOY_SUBDIR="branch/${SAFE_BRANCH}"
           BASE="/puzzle-generator/${DEPLOY_SUBDIR}/"
           URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${DEPLOY_SUBDIR}/"
-          echo "SAFE_BRANCH=$SAFE_BRANCH" >> $GITHUB_OUTPUT
           echo "DEPLOY_SUBDIR=$DEPLOY_SUBDIR" >> $GITHUB_OUTPUT
           echo "BASE=$BASE" >> $GITHUB_OUTPUT
           echo "URL=$URL" >> $GITHUB_OUTPUT
 
+      # 4) Install dependencies
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      # 5) Build with correct base (call vite directly)
       - name: Build (branch-scoped base)
-        run: pnpm run build -- --base="${{ steps.paths.outputs.BASE }}"
+        run: pnpm vite build --base="${{ steps.paths.outputs.BASE }}"
 
+      # 6) Add SPA fallback
       - name: Add SPA fallback
         run: |
           [ -f dist/index.html ] && cp dist/index.html dist/404.html
 
-      - name: Deploy to gh-pages/<DEPLOY_SUBDIR>
+      # 7) Deploy to gh-pages/<DEPLOY_SUBDIR>
+      - name: Deploy to gh-pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -75,6 +80,7 @@ jobs:
           target-folder: ${{ steps.paths.outputs.DEPLOY_SUBDIR }}
           clean: false   # keep other previews
 
+      # 8) Output the preview URL
       - name: Output preview URL
         run: |
           echo "### ✅ Branch preview published" >> $GITHUB_STEP_SUMMARY
