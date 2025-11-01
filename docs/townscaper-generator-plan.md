@@ -34,11 +34,13 @@
 - Identify UI touch points (`PieceGeneratorRegistry`, `PuzzlePage` imports) to integrate the new generator and hide the point generator experiment.
 - Establish a baseline Townscaper debug route so subsequent phases can be demonstrated visually through the existing preview builds.
 
-### Phase 1 – Core Lattice Model
+### Phase 1 – Core Lattice Model *(Completed)*
 - Implement a deterministic routine that builds the Townscaper base lattice across the puzzle bounds (likely via triangular coordinates with alternating row offsets).
 - Store both vertex positions and connectivity metadata (triangles, shared edges) to support later clustering and boundary tracing.
 - Clip or filter lattice vertices to the puzzle border using `isPointInBoundary` while retaining adjacency information for partially clipped cells.
 - Render the lattice in the debug page with color-coded axial coordinates and expose piece size and seed controls so reviewers can confirm spacing/alignment in the GitHub Pages preview.
+
+**Status update:** The new `createTownscaperLattice` module produces deterministic vertices, edges, and triangle adjacency data while respecting the puzzle border, and the `TownscaperDebugPage` now visualizes the lattice with piece size + seed controls. Future work should proceed with Phase 2.
 
 ### Phase 2 – Block Clustering
 - Reuse/adapt the merge queue logic to group adjacent triangles into clusters based on configurable merge probability.
