@@ -28,11 +28,11 @@
 
 ## Implementation Roadmap
 
-### Phase 0 – Preparatory Analysis
-- Audit `PieceGenerator` interface, `PuzzleTopology` structure, and helper functions (`createPieceFromPolygon`, `clipCellToBoundary`, `linkAndCreateEdges`).
-- Catalogue reusable pieces of logic from `TownscaperPointGenerator` (lattice creation, triangle adjacency, clustering, relaxation) that can be transplanted into the piece generator.
-- Identify UI touch points (`PieceGeneratorRegistry`, `PuzzlePage` imports) to integrate the new generator and hide the point generator experiment.
-- Establish a baseline Townscaper debug route so subsequent phases can be demonstrated visually through the existing preview builds.
+### Phase 0 – Preparatory Analysis *(Completed)*
+- **Core API audit** – Confirmed the `PieceGenerator` contract only requires a `generatePieces(points, runtimeOpts)` method and documented the supporting runtime options plus `PuzzleTopology` expectations (maps for pieces/edges/half-edges, boundary edge list, and preserved `borderPath`). Key helper utilities available today include `createPieceFromPolygon`, `clipCellToBoundary`, and `linkAndCreateEdges`, which collectively handle polygon half-edge loops, boundary clipping, and twin wiring without reimplementing topology plumbing.
+- **Reusable Townscaper logic** – Catalogued the point generator helpers to migrate into the piece generator: lattice spacing calculation, indexed lattice construction, triangle adjacency, probabilistic clustering, centroid measurement, adjacency mapping, and relaxation. These routines already isolate deterministic RNG usage, making them good extraction targets.
+- **Integration touch points** – Verified generator registries and the puzzle page wiring so we know where to register the upcoming `TownscaperPieceGenerator`, swap defaults, and eventually retire the point generator entry. Navigation already exposes a `/townscaper-debug` route, and the debug page imports lattice data directly, so the phase-two overlays can bolt onto this surface.
+- **Debug harness baseline** – The `TownscaperDebugPage` route renders the lattice inspector with seeded controls and metrics. This page will host the future cluster/polygon overlays, so no additional routing work is required before moving into Phase 2.
 
 ### Phase 1 – Core Lattice Model *(Completed)*
 - Implement a deterministic routine that builds the Townscaper base lattice across the puzzle bounds (likely via triangular coordinates with alternating row offsets).
