@@ -42,11 +42,13 @@
 
 **Status update:** The new `createTownscaperLattice` module produces deterministic vertices, edges, and triangle adjacency data while respecting the puzzle border, and the `TownscaperDebugPage` now visualizes the lattice with piece size + seed controls. Future work should proceed with Phase 2.
 
-### Phase 2 – Block Clustering
-- Reuse/adapt the merge queue logic to group adjacent triangles into clusters based on configurable merge probability.
-- Track cluster membership at the edge level so that we can derive the outer boundary of each cluster without losing neighboring relationships.
-- Ensure clusters respect the puzzle border: drop triangles that straddle the boundary if their centroid falls outside, or split clusters accordingly.
-- Add a debug overlay that fills each cluster with a distinct color and lists cluster statistics in the mobile-friendly panel.
+### Phase 2 – Block Pairing *(Completed)*
+- Randomly pair adjacent triangles so that Townscaper-style diamond blocks emerge without creating larger multi-cell clusters.
+- Record which lattice edges are removed during pairing so later phases can ignore those interior seams when tracing polygons.
+- Ensure pairing respects the puzzle border by only merging triangles whose centroids fall inside the clipping region.
+- Add a debug overlay that colors each paired diamond (and highlights single leftovers) while reporting pairing statistics in the control panel.
+
+**Status update:** Introduced a deterministic `pairTownscaperTriangles` helper that shuffles in-boundary triangles, pairs them with an available neighbor, and captures the lattice edges removed during each merge. The Townscaper debug page now visualizes the resulting diamonds with shared colors, lists counts for paired vs. single triangles, and draws the removed edges with a dashed highlight to mirror the reference algorithm.
 
 ### Phase 3 – Polygon Extraction
 - Convert each cluster into a simple polygon by walking the perimeter edges (e.g., build a directed edge map keyed by lattice edge -> cluster id, then trace the boundary loops in clockwise order).

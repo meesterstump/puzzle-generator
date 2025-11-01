@@ -8,6 +8,10 @@ import {
   createTownscaperLattice,
   type TownscaperLattice,
 } from '../geometry/generators/piece/townscaper/TownscaperLattice';
+import {
+  pairTownscaperTriangles,
+  type TownscaperPairingResult,
+} from '../geometry/generators/piece/townscaper/TownscaperPairing';
 
 import './TownscaperDebugPage.css';
 
@@ -16,6 +20,17 @@ const PALETTE = [
   '#4dabf7',
   '#51cf66',
   '#845ef7',
+];
+
+const PAIR_COLORS = [
+  '#f6bd60',
+  '#f28482',
+  '#84a59d',
+  '#f5cac3',
+  '#82c0cc',
+  '#90be6d',
+  '#ffafcc',
+  '#cdb4db',
 ];
 
 /**
@@ -29,20 +44,28 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
     seed: 1,
     border: createRectangleBorder(900, 600),
     lattice: null as TownscaperLattice | null,
+    pairing: null as TownscaperPairingResult | null,
   };
 
   const rebuildLattice = () => {
     const random = mulberry32(state.seed);
-    state.lattice = createTownscaperLattice({
+    const lattice = createTownscaperLattice({
       width: state.width,
       height: state.height,
       pieceSize: state.pieceSize,
       border: state.border,
       random,
     });
+    state.lattice = lattice;
+    state.pairing = pairTownscaperTriangles({
+      lattice,
+      random,
+    });
   };
 
-  const handleSliderChange = (field: 'pieceSize' | 'seed') => (event: Event) => {
+  const handleSliderChange = (
+    field: 'pieceSize' | 'seed',
+  ) => (event: Event) => {
     const slider = event.target as WaSlider;
     const numeric = Number(slider.value);
     state[field] = Number.isFinite(numeric) ? numeric : state[field];
@@ -59,15 +82,20 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
         rebuildLattice();
       }
       const lattice = state.lattice!;
+      const pairing = state.pairing;
       const activeTriangles = lattice.triangles.filter((triangle) => triangle.insideBoundary).length;
       const activeVertices = lattice.vertices.filter((vertex) => vertex.insideBoundary).length;
       const boundaryEdges = lattice.edges.filter((edge) => edge.touchesBoundary).length;
+      const pairCount = pairing ? pairing.pairs.filter((pair) => pair.triangleIds.length === 2).length : 0;
+      const singlesCount = pairing ? pairing.pairs.filter((pair) => pair.triangleIds.length === 1).length : 0;
+      const removedEdges = pairing ? pairing.removedEdgeIds.length : 0;
+      const removedEdgeSet = new Set(pairing?.removedEdgeIds ?? []);
 
       return m('.townscaper-debug-page', [
         m('h1', 'Townscaper Lattice Debug'),
         m('p.description', [
-          'Phase 1 visualizer for the Townscaper-inspired generator. Adjust the sliders to verify piece sizing '
-          + 'and seeded determinism before clustering logic is added.',
+          'Phase 2 visualizer for the Townscaper-inspired generator. Adjust the sliders to explore seeded '
+          + 'lattice construction and observe how triangles pair into diamond-shaped Townscaper blocks.',
         ]),
         m('.townscaper-debug-layout', [
           m('.townscaper-debug-controls', [
@@ -102,6 +130,18 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
                 m('span.label', 'Boundary edges'),
                 m('span.value', `${boundaryEdges}`),
               ]),
+              m('div', [
+                m('span.label', 'Paired diamonds'),
+                m('span.value', `${pairCount}`),
+              ]),
+              m('div', [
+                m('span.label', 'Single triangles'),
+                m('span.value', `${singlesCount}`),
+              ]),
+              m('div', [
+                m('span.label', 'Removed interior edges'),
+                m('span.value', `${removedEdges}`),
+              ]),
             ]),
           ]),
           m('.townscaper-debug-preview', [
@@ -120,18 +160,43 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
                 stroke: '#9e9e9e',
                 'stroke-width': 1,
               }),
+              pairing
+                ? pairing.triangleToPair.flatMap((pairId, triangleIndex) => {
+                  if (pairId === -1) {
+                    return [];
+                  }
+                  const triangle = lattice.triangles[triangleIndex];
+                  if (!triangle?.insideBoundary) {
+                    return [];
+                  }
+                  const vertices = triangle.vertices.map((vertexId) => lattice.vertices[vertexId]?.position);
+                  if (vertices.some((vertex) => !vertex)) {
+                    return [];
+                  }
+                  const fill = PAIR_COLORS[pairId % PAIR_COLORS.length];
+                  return m('polygon', {
+                    points: vertices.map((vertex) => `${vertex[0]},${vertex[1]}`).join(' '),
+                    fill,
+                    opacity: 0.45,
+                    stroke: fill,
+                    'stroke-width': 0.5,
+                  });
+                })
+                : null,
               lattice.edges.map((edge) => {
                 const start = lattice.vertices[edge.vertices[0]].position;
                 const end = lattice.vertices[edge.vertices[1]].position;
+                const removed = removedEdgeSet.has(edge.id);
                 return m('line', {
                   x1: start[0],
                   y1: start[1],
                   x2: end[0],
                   y2: end[1],
-                  stroke: edge.touchesBoundary ? '#ff922b' : '#2f9e44',
-                  'stroke-width': edge.touchesBoundary ? 2 : 1,
+                  stroke: removed ? '#adb5bd' : (edge.touchesBoundary ? '#ff922b' : '#2f9e44'),
+                  'stroke-width': removed ? 0.75 : (edge.touchesBoundary ? 2 : 1),
                   'stroke-linecap': 'round',
-                  opacity: edge.touchesBoundary ? 0.85 : 0.4,
+                  'stroke-dasharray': removed ? '4 3' : undefined,
+                  opacity: removed ? 0.35 : (edge.touchesBoundary ? 0.85 : 0.4),
                 });
               }),
               lattice.vertices.map((vertex) => {
