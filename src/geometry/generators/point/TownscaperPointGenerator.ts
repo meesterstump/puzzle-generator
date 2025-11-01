@@ -15,10 +15,6 @@ export const Name: TownscaperPointGeneratorName = "TownscaperPointGenerator";
 /** Required config for this generator */
 export interface TownscaperPointGeneratorConfig extends GeneratorConfig {
   name: TownscaperPointGeneratorName;
-  /** Relative spacing multiplier applied to runtime piece size when building lattice */
-  latticeSpacing: number;
-  /** Amount of random jitter (0 to 100) */
-  jitter: number;
   /** Probability percentage used when merging adjacent triangles into larger blocks */
   mergeProbability: number;
   /** Number of centroid relaxation passes applied after clustering */
@@ -34,26 +30,6 @@ export const TownscaperPointUIMetadata: GeneratorUIMetadata = {
   description: "Generate seed points using a triangular lattice inspired by Townscaper.",
   sortHint: 3,
   controls: [
-    {
-      type: 'range',
-      name: 'latticeSpacing',
-      label: 'Lattice Spacing',
-      min: 50,
-      max: 150,
-      step: 5,
-      defaultValue: 80,
-      helpText: 'Spacing between lattice rows as a percentage of the typical piece size.',
-    },
-    {
-      type: 'range',
-      name: 'jitter',
-      label: 'Point Jitter',
-      min: 0,
-      max: 100,
-      step: 5,
-      defaultValue: 10,
-      helpText: 'Random offset applied to each lattice point to avoid a too-perfect pattern.',
-    },
     {
       type: 'range',
       name: 'mergeProbability',
@@ -96,8 +72,6 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
   config: TownscaperPointGeneratorConfig,
 ) => {
   const {
-    latticeSpacing = 80,
-    jitter = 10,
     mergeProbability = 35,
     relaxationIterations = 2,
     relaxationStrength = 50,
@@ -112,22 +86,12 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
   const clampPercentage = (value: number): number => Math.min(100, Math.max(0, value));
 
   const resolveSpacing = (pieceSize: number): { horizontal: number; vertical: number } => {
-    const baseSpacing = Math.max(pieceSize * (latticeSpacing / 100), 4);
+    const baseSpacing = Math.max(pieceSize, 4);
     const verticalSpacing = baseSpacing * TRIANGULAR_VERTICAL_RATIO;
     return {
       horizontal: baseSpacing,
       vertical: verticalSpacing,
     };
-  };
-
-  const applyJitter = (point: Vec2, horizontalSpacing: number, verticalSpacing: number, random: () => number): Vec2 => {
-    if (jitter <= 0) {
-      return point;
-    }
-    const jitterFactor = jitter / 100;
-    const dx = (random() - 0.5) * jitterFactor * horizontalSpacing;
-    const dy = (random() - 0.5) * jitterFactor * verticalSpacing;
-    return [point[0] + dx, point[1] + dy];
   };
 
   const generateLattice = (
@@ -138,7 +102,7 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
     rowLimit: number;
     columnLimit: number;
   } => {
-    const { width, height, pieceSize, random, border } = runtimeOpts;
+    const { width, height, pieceSize, border } = runtimeOpts;
     const { horizontal, vertical } = resolveSpacing(pieceSize);
     const overscanX = horizontal;
     const overscanY = vertical;
@@ -155,12 +119,11 @@ export const TownscaperPointGeneratorFactory: GeneratorFactory<PointGenerator> =
       for (let columnIndex = 0; columnIndex <= columns; columnIndex += 1) {
         const x = startX + columnIndex * horizontal;
         const candidate: Vec2 = [x + offsetX, y];
-        const jittered = applyJitter(candidate, horizontal, vertical, random);
-        if (isPointInBoundary(jittered, border)) {
+        if (isPointInBoundary(candidate, border)) {
           const latticePoint: LatticePoint = {
             row: rowIndex,
             column: columnIndex,
-            position: jittered,
+            position: candidate,
           };
           indexByCoord.set(`${rowIndex}:${columnIndex}`, points.length);
           points.push(latticePoint);

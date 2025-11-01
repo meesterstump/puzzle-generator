@@ -39,6 +39,11 @@ export const Navigation: m.Component = {
             appearance: 'button',
             value: '/test',
           }, "Test Harness"),
+
+          m('wa-radio', {
+            appearance: 'button',
+            value: '/townscaper-debug',
+          }, "Townscaper Debug"),
         ])
       ),
     ]);
