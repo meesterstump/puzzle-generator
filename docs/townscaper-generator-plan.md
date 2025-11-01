@@ -38,7 +38,7 @@
 - Implement a deterministic routine that builds the Townscaper base lattice across the puzzle bounds (likely via triangular coordinates with alternating row offsets).
 - Store both vertex positions and connectivity metadata (triangles, shared edges) to support later clustering and boundary tracing.
 - Clip or filter lattice vertices to the puzzle border using `isPointInBoundary` while retaining adjacency information for partially clipped cells.
-- Render the lattice in the debug page with color-coded axial coordinates and optional jitter sliders so reviewers can confirm spacing/alignment in the GitHub Pages preview.
+- Render the lattice in the debug page with color-coded axial coordinates and expose piece size and seed controls so reviewers can confirm spacing/alignment in the GitHub Pages preview.
 
 ### Phase 2 – Block Clustering
 - Reuse/adapt the merge queue logic to group adjacent triangles into clusters based on configurable merge probability.
