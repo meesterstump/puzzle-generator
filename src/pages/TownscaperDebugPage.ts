@@ -8,6 +8,10 @@ import {
   createTownscaperLattice,
   type TownscaperLattice,
 } from '../geometry/generators/piece/townscaper/TownscaperLattice';
+import {
+  clusterTownscaperLattice,
+  type TownscaperClusteringResult,
+} from '../geometry/generators/piece/townscaper/TownscaperClustering';
 
 import './TownscaperDebugPage.css';
 
@@ -18,6 +22,17 @@ const PALETTE = [
   '#845ef7',
 ];
 
+const CLUSTER_COLORS = [
+  '#f6bd60',
+  '#f28482',
+  '#84a59d',
+  '#f5cac3',
+  '#82c0cc',
+  '#90be6d',
+  '#ffafcc',
+  '#cdb4db',
+];
+
 /**
  * Debug page that visualizes the Townscaper lattice during Phase 1.
  */
@@ -26,28 +41,41 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
     width: 900,
     height: 600,
     pieceSize: 120,
+    mergeProbability: 45,
     seed: 1,
     border: createRectangleBorder(900, 600),
     lattice: null as TownscaperLattice | null,
+    clustering: null as TownscaperClusteringResult | null,
   };
 
   const rebuildLattice = () => {
     const random = mulberry32(state.seed);
-    state.lattice = createTownscaperLattice({
+    const lattice = createTownscaperLattice({
       width: state.width,
       height: state.height,
       pieceSize: state.pieceSize,
       border: state.border,
       random,
     });
+    state.lattice = lattice;
+    state.clustering = clusterTownscaperLattice({
+      lattice,
+      mergeChance: state.mergeProbability / 100,
+      random,
+    });
   };
 
-  const handleSliderChange = (field: 'pieceSize' | 'seed') => (event: Event) => {
+  const handleSliderChange = (
+    field: 'pieceSize' | 'seed' | 'mergeProbability',
+  ) => (event: Event) => {
     const slider = event.target as WaSlider;
     const numeric = Number(slider.value);
     state[field] = Number.isFinite(numeric) ? numeric : state[field];
     if (field === 'seed') {
       state[field] = Math.max(0, Math.round(state[field]));
+    }
+    if (field === 'mergeProbability') {
+      state[field] = Math.min(100, Math.max(0, Math.round(state[field])));
     }
     rebuildLattice();
   };
@@ -59,15 +87,26 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
         rebuildLattice();
       }
       const lattice = state.lattice!;
+      const clustering = state.clustering;
       const activeTriangles = lattice.triangles.filter((triangle) => triangle.insideBoundary).length;
       const activeVertices = lattice.vertices.filter((vertex) => vertex.insideBoundary).length;
       const boundaryEdges = lattice.edges.filter((edge) => edge.touchesBoundary).length;
+      const clusterCount = clustering ? clustering.clusters.length : 0;
+      const clusterSizes = clustering
+        ? clustering.clusters.map((cluster) => cluster.triangleIds.length)
+        : [];
+      const averageClusterSize = clusterSizes.length > 0
+        ? clusterSizes.reduce((sum, count) => sum + count, 0) / clusterSizes.length
+        : 0;
+      const largestCluster = clusterSizes.length > 0
+        ? Math.max(...clusterSizes)
+        : 0;
 
       return m('.townscaper-debug-page', [
         m('h1', 'Townscaper Lattice Debug'),
         m('p.description', [
-          'Phase 1 visualizer for the Townscaper-inspired generator. Adjust the sliders to verify piece sizing '
-          + 'and seeded determinism before clustering logic is added.',
+          'Phase 2 visualizer for the Townscaper-inspired generator. Adjust the sliders to explore seeded '
+          + 'lattice construction, clustering probability, and the resulting Townscaper-style blocks.',
         ]),
         m('.townscaper-debug-layout', [
           m('.townscaper-debug-controls', [
@@ -89,6 +128,15 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
               'with-tooltip': true,
               onchange: handleSliderChange('seed'),
             }),
+            m('wa-slider', {
+              label: 'Merge Probability (%)',
+              min: 0,
+              max: 100,
+              step: 1,
+              value: state.mergeProbability,
+              'with-tooltip': true,
+              onchange: handleSliderChange('mergeProbability'),
+            }),
             m('.metrics', [
               m('div', [
                 m('span.label', 'Vertices in border'),
@@ -101,6 +149,18 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
               m('div', [
                 m('span.label', 'Boundary edges'),
                 m('span.value', `${boundaryEdges}`),
+              ]),
+              m('div', [
+                m('span.label', 'Clusters'),
+                m('span.value', `${clusterCount}`),
+              ]),
+              m('div', [
+                m('span.label', 'Avg cluster size'),
+                m('span.value', clusterSizes.length > 0 ? averageClusterSize.toFixed(2) : '0'),
+              ]),
+              m('div', [
+                m('span.label', 'Largest cluster (triangles)'),
+                m('span.value', `${largestCluster}`),
               ]),
             ]),
           ]),
@@ -120,6 +180,29 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
                 stroke: '#9e9e9e',
                 'stroke-width': 1,
               }),
+              clustering
+                ? clustering.triangleToCluster.flatMap((clusterId, triangleIndex) => {
+                  if (clusterId === -1) {
+                    return [];
+                  }
+                  const triangle = lattice.triangles[triangleIndex];
+                  if (!triangle?.insideBoundary) {
+                    return [];
+                  }
+                  const vertices = triangle.vertices.map((vertexId) => lattice.vertices[vertexId]?.position);
+                  if (vertices.some((vertex) => !vertex)) {
+                    return [];
+                  }
+                  const fill = CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length];
+                  return m('polygon', {
+                    points: vertices.map((vertex) => `${vertex[0]},${vertex[1]}`).join(' '),
+                    fill,
+                    opacity: 0.45,
+                    stroke: fill,
+                    'stroke-width': 0.5,
+                  });
+                })
+                : null,
               lattice.edges.map((edge) => {
                 const start = lattice.vertices[edge.vertices[0]].position;
                 const end = lattice.vertices[edge.vertices[1]].position;

@@ -42,11 +42,13 @@
 
 **Status update:** The new `createTownscaperLattice` module produces deterministic vertices, edges, and triangle adjacency data while respecting the puzzle border, and the `TownscaperDebugPage` now visualizes the lattice with piece size + seed controls. Future work should proceed with Phase 2.
 
-### Phase 2 – Block Clustering
+### Phase 2 – Block Clustering *(Completed)*
 - Reuse/adapt the merge queue logic to group adjacent triangles into clusters based on configurable merge probability.
 - Track cluster membership at the edge level so that we can derive the outer boundary of each cluster without losing neighboring relationships.
 - Ensure clusters respect the puzzle border: drop triangles that straddle the boundary if their centroid falls outside, or split clusters accordingly.
 - Add a debug overlay that fills each cluster with a distinct color and lists cluster statistics in the mobile-friendly panel.
+
+**Status update:** Added a dedicated `TownscaperClustering` module that deterministically merges in-boundary triangles using a configurable merge probability, records both triangle and edge membership for each cluster, and surfaces the results through the Townscaper debug page. The debug UI now includes a merge probability slider, per-cluster metrics, and a filled polygon overlay so reviewers can inspect the clustered blocks directly in the GitHub Pages preview.
 
 ### Phase 3 – Polygon Extraction
 - Convert each cluster into a simple polygon by walking the perimeter edges (e.g., build a directed edge map keyed by lattice edge -> cluster id, then trace the boundary loops in clockwise order).
