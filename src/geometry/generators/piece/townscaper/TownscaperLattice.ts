@@ -14,13 +14,14 @@ export interface TownscaperLatticeOptions {
   height: number;
   /** Nominal puzzle piece size from runtime configuration. */
   pieceSize: number;
-  /** Lattice spacing as a percentage multiplier of the piece size. */
-  latticeSpacing: number;
-  /** Random jitter amount expressed as a percentage of spacing. */
-  jitter: number;
   /** Puzzle border used to filter lattice points. */
   border: PathCommand[];
-  /** Seeded random number generator supplied by the runtime. */
+  /**
+   * Seeded random number generator supplied by the runtime.
+   *
+   * The initial lattice construction does not use randomness but accepts the
+   * generator so later phases can reuse the same options object.
+   */
   random: () => number;
 }
 
@@ -34,7 +35,7 @@ export interface TownscaperLatticeVertex {
   row: number;
   /** Column index in the triangular lattice. */
   column: number;
-  /** Final world-space position after jitter. */
+  /** Final world-space position. */
   position: Vec2;
   /** Indicates whether the vertex lies inside the puzzle border. */
   insideBoundary: boolean;
@@ -92,23 +93,6 @@ export interface TownscaperLattice {
 
 const createEdgeKey = (a: number, b: number): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
 
-const applyJitter = (
-  point: Vec2,
-  jitterPercentage: number,
-  horizontalSpacing: number,
-  verticalSpacing: number,
-  random: () => number,
-): Vec2 => {
-  if (jitterPercentage <= 0) {
-    return point;
-  }
-
-  const jitterFactor = jitterPercentage / 100;
-  const dx = (random() - 0.5) * jitterFactor * horizontalSpacing;
-  const dy = (random() - 0.5) * jitterFactor * verticalSpacing;
-  return [point[0] + dx, point[1] + dy];
-};
-
 interface EdgeRecord {
   vertices: [number, number];
   triangles: number[];
@@ -118,22 +102,21 @@ interface EdgeRecord {
  * Build the base Townscaper lattice used by later generator phases.
  *
  * The function constructs a triangular lattice (two triangles per cell) across
- * the requested bounds, applies jitter, records adjacency metadata, and marks
- * entries that intersect the puzzle border. The routine is deterministic when
- * supplied with a seeded {@link TownscaperLatticeOptions.random} implementation.
+ * the requested bounds, records adjacency metadata, and marks entries that
+ * intersect the puzzle border. The routine is deterministic and currently does
+ * not use randomness, but accepts a seeded {@link TownscaperLatticeOptions.random}
+ * implementation for parity with later phases.
  */
 export function createTownscaperLattice(options: TownscaperLatticeOptions): TownscaperLattice {
   const {
     width,
     height,
     pieceSize,
-    latticeSpacing,
-    jitter,
     border,
-    random,
+    random: _random,
   } = options;
 
-  const spacing = Math.max(pieceSize * (latticeSpacing / 100), 4);
+  const spacing = Math.max(pieceSize, 4);
   const horizontalSpacing = spacing;
   const verticalSpacing = spacing * TRIANGULAR_VERTICAL_RATIO;
 
@@ -155,15 +138,14 @@ export function createTownscaperLattice(options: TownscaperLatticeOptions): Town
     for (let columnIndex = 0; columnIndex <= columnLimit; columnIndex += 1) {
       const x = startX + columnIndex * horizontalSpacing;
       const basePoint: Vec2 = [x + offsetX, y];
-      const jittered = applyJitter(basePoint, jitter, horizontalSpacing, verticalSpacing, random);
-      const insideBoundary = isPointInBoundary(jittered, border);
+      const insideBoundary = isPointInBoundary(basePoint, border);
       const vertexIndex = vertices.length;
 
       vertices.push({
         id: vertexIndex,
         row: rowIndex,
         column: columnIndex,
-        position: jittered,
+        position: basePoint,
         insideBoundary,
       });
       indexByCoord.set(`${rowIndex}:${columnIndex}`, vertexIndex);

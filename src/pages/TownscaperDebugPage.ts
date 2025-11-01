@@ -18,8 +18,6 @@ const PALETTE = [
   '#845ef7',
 ];
 
-const clampPercentage = (value: number): number => Math.max(0, Math.min(100, value));
-
 /**
  * Debug page that visualizes the Townscaper lattice during Phase 1.
  */
@@ -28,8 +26,6 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
     width: 900,
     height: 600,
     pieceSize: 120,
-    latticeSpacing: 85,
-    jitter: 10,
     seed: 1,
     border: createRectangleBorder(900, 600),
     lattice: null as TownscaperLattice | null,
@@ -41,14 +37,12 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
       width: state.width,
       height: state.height,
       pieceSize: state.pieceSize,
-      latticeSpacing: clampPercentage(state.latticeSpacing),
-      jitter: clampPercentage(state.jitter),
       border: state.border,
       random,
     });
   };
 
-  const handleSliderChange = (field: 'pieceSize' | 'latticeSpacing' | 'jitter' | 'seed') => (event: Event) => {
+  const handleSliderChange = (field: 'pieceSize' | 'seed') => (event: Event) => {
     const slider = event.target as WaSlider;
     const numeric = Number(slider.value);
     state[field] = Number.isFinite(numeric) ? numeric : state[field];
@@ -72,8 +66,8 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
       return m('.townscaper-debug-page', [
         m('h1', 'Townscaper Lattice Debug'),
         m('p.description', [
-          'Phase 1 visualizer for the Townscaper-inspired generator. Adjust the sliders to verify lattice spacing, jitter, and '
-          + 'seeded determinism before clustering logic is added.',
+          'Phase 1 visualizer for the Townscaper-inspired generator. Adjust the sliders to verify piece sizing '
+          + 'and seeded determinism before clustering logic is added.',
         ]),
         m('.townscaper-debug-layout', [
           m('.townscaper-debug-controls', [
@@ -85,24 +79,6 @@ export const TownscaperDebugPage: m.ClosureComponent = () => {
               value: state.pieceSize,
               'with-tooltip': true,
               onchange: handleSliderChange('pieceSize'),
-            }),
-            m('wa-slider', {
-              label: 'Lattice Spacing %',
-              min: 40,
-              max: 140,
-              step: 5,
-              value: state.latticeSpacing,
-              'with-tooltip': true,
-              onchange: handleSliderChange('latticeSpacing'),
-            }),
-            m('wa-slider', {
-              label: 'Jitter %',
-              min: 0,
-              max: 60,
-              step: 5,
-              value: state.jitter,
-              'with-tooltip': true,
-              onchange: handleSliderChange('jitter'),
             }),
             m('wa-slider', {
               label: 'Seed',
